@@ -14,6 +14,56 @@ npm install
 npm run start:dev
 ```
 
+## Production
+
+This repo is ready for a basic Node.js deployment on Hostinger for `adminapi.opplexify.com`.
+
+Required environment variables:
+
+```env
+HOST=0.0.0.0
+PORT=3000
+APP_URL=https://adminapi.opplexify.com
+DB_HOST=your-db-host
+DB_PORT=3306
+DB_USER=your-db-user
+DB_PASS=your-db-password
+DB_NAME=your-db-name
+JWT_SECRET=your-strong-secret
+JWT_EXPIRES_IN=7d
+ADMIN_SEED_EMAIL=admin@opplexify.com
+ADMIN_SEED_PASSWORD=ChangeMe123!
+```
+
+Notes:
+
+- `npm install` will automatically run `npm run build` because of the `postinstall` script.
+- App startup command is `npm start`.
+- Static files inside `storage/` are served from `/assets`.
+- Health check endpoint is `GET /health`.
+
+## Hostinger Deploy
+
+1. Create a new `Node.js` website in Hostinger hPanel.
+2. Use the domain/subdomain `adminapi.opplexify.com`.
+3. Upload this project to the app directory or connect the Git repo.
+4. Set the application startup command to:
+```bash
+npm start
+```
+5. Set the install command to:
+```bash
+npm install
+```
+6. Add the environment variables from the section above in Hostinger.
+7. Create the MySQL database in Hostinger and use those credentials in the env vars.
+8. Restart the Node.js app from hPanel.
+
+After deployment, test:
+
+- `https://adminapi.opplexify.com/health`
+- `https://adminapi.opplexify.com/auth/login`
+
 ## Endpoints
 
 - `GET /health`
