@@ -8,6 +8,7 @@ import { Edition } from '../entities/edition.entity';
 import { FeatureFlag } from '../entities/feature_flag.entity';
 import { Request, Response } from 'express';
 import { AssetPacksService } from '../asset_packs/asset_packs.service';
+import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { PublicAiService } from './public_ai.service';
 
 @Controller('public')
@@ -15,6 +16,7 @@ export class PublicController {
   constructor(
     private readonly assetPacksService: AssetPacksService,
     private readonly publicAiService: PublicAiService,
+    private readonly cache: MemoryCacheService,
     @InjectRepository(ContentDataset)
     private readonly contentDatasets: Repository<ContentDataset>,
     @InjectRepository(Announcement)
@@ -28,52 +30,56 @@ export class PublicController {
   async getConfig(@Req() req: Request) {
     const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol;
     const host = req.get('host');
-    const assetsBaseUrl = host ? `${proto}://${host}/public/pages` : '';
+    const cacheKey = `public-config:${proto}:${host ?? 'unknown-host'}`;
 
-    const [activePacks, activeDatasets, editions, settings, flags, announcements] =
-      await Promise.all([
-        this.assetPacksService.activePacks(),
-        this.contentDatasets.find({ where: { active: true } }),
-        this.editions.find({ order: { id: 'ASC' } }),
-        this.settings.find(),
-        this.flags.find(),
-        this.announcements.find({ where: { active: true } }),
-      ]);
+    return this.cache.getOrSet(cacheKey, 5_000, async () => {
+      const assetsBaseUrl = host ? `${proto}://${host}/public/pages` : '';
 
-    return {
-      assetsBaseUrl,
-      assetPacks: activePacks.map((pack) => ({
-        edition: pack.edition,
-        version: pack.version,
-        pageCount: pack.pageCount,
-        fileExtension: pack.fileExtension,
-        availableImportedPages: this._explicitImportedPagesForPack(
-          pack.availableImportedPages,
-          pack.pageCount,
-        ),
-      })),
-      contentDatasets: activeDatasets.map((dataset) => ({
-        key: dataset.key,
-        version: dataset.version,
-        url: host ? `${proto}://${host}${dataset.publicPath}` : dataset.publicPath,
-      })),
-      editions: editions.map((edition) => ({
-        key: edition.key,
-        label: edition.label,
-        enabled: edition.enabled,
-      })),
-      settings: settings
-        .filter((setting) => this._isPublicSetting(setting.key))
-        .map((setting) => ({ key: setting.key, value: setting.value })),
-      featureFlags: flags.map((flag) => ({ key: flag.key, enabled: flag.enabled })),
-      announcements: announcements.map((item) => ({
-        id: item.id,
-        title: item.title,
-        body: item.body,
-        publishAt: item.publishAt,
-      })),
-      serverTime: new Date().toISOString(),
-    };
+      const [activePacks, activeDatasets, editions, settings, flags, announcements] =
+        await Promise.all([
+          this.assetPacksService.activePacks(),
+          this.contentDatasets.find({ where: { active: true } }),
+          this.editions.find({ order: { id: 'ASC' } }),
+          this.settings.find(),
+          this.flags.find(),
+          this.announcements.find({ where: { active: true } }),
+        ]);
+
+      return {
+        assetsBaseUrl,
+        assetPacks: activePacks.map((pack) => ({
+          edition: pack.edition,
+          version: pack.version,
+          pageCount: pack.pageCount,
+          fileExtension: pack.fileExtension,
+          availableImportedPages: this._explicitImportedPagesForPack(
+            pack.availableImportedPages,
+            pack.pageCount,
+          ),
+        })),
+        contentDatasets: activeDatasets.map((dataset) => ({
+          key: dataset.key,
+          version: dataset.version,
+          url: host ? `${proto}://${host}${dataset.publicPath}` : dataset.publicPath,
+        })),
+        editions: editions.map((edition) => ({
+          key: edition.key,
+          label: edition.label,
+          enabled: edition.enabled,
+        })),
+        settings: settings
+          .filter((setting) => this._isPublicSetting(setting.key))
+          .map((setting) => ({ key: setting.key, value: setting.value })),
+        featureFlags: flags.map((flag) => ({ key: flag.key, enabled: flag.enabled })),
+        announcements: announcements.map((item) => ({
+          id: item.id,
+          title: item.title,
+          body: item.body,
+          publishAt: item.publishAt,
+        })),
+        serverTime: new Date().toISOString(),
+      };
+    });
   }
 
   @Post('ai/run')
@@ -105,6 +111,7 @@ export class PublicController {
       Number(importedPageNumber),
     );
     res.type(pageFile.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return res.sendFile(pageFile.absolutePath);
   }
 

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { AppSetting } from '../entities/app_setting.entity';
 import { FeatureFlag } from '../entities/feature_flag.entity';
 import {
@@ -15,6 +16,7 @@ export class SettingsService {
     private readonly settingsRepo: Repository<AppSetting>,
     @InjectRepository(FeatureFlag)
     private readonly flagsRepo: Repository<FeatureFlag>,
+    private readonly cache: MemoryCacheService,
   ) {}
 
   async getSettings(rawPage?: number | string, rawPageSize?: number | string) {
@@ -30,8 +32,10 @@ export class SettingsService {
     return buildPaginatedResponse(items, totalItems, page, pageSize);
   }
 
-  upsertSetting(payload: Partial<AppSetting>) {
-    return this.settingsRepo.save(payload);
+  async upsertSetting(payload: Partial<AppSetting>) {
+    const saved = await this.settingsRepo.save(payload);
+    this._invalidateCaches();
+    return saved;
   }
 
   async getFlags(rawPage?: number | string, rawPageSize?: number | string) {
@@ -49,6 +53,14 @@ export class SettingsService {
 
   async toggleFlag(id: number, enabled: boolean) {
     await this.flagsRepo.update({ id }, { enabled });
-    return this.flagsRepo.findOne({ where: { id } });
+    const flag = await this.flagsRepo.findOne({ where: { id } });
+    this._invalidateCaches();
+    return flag;
+  }
+
+  private _invalidateCaches() {
+    this.cache.deleteByPrefix('public-config:');
+    this.cache.deleteByPrefix('public-ai:');
+    this.cache.deleteByPrefix('admin:');
   }
 }

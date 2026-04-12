@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { AppUser } from '../entities/app_user.entity';
 import {
   buildPaginatedResponse,
@@ -20,6 +21,7 @@ export class UsersService {
   constructor(
     @InjectRepository(AppUser)
     private readonly repo: Repository<AppUser>,
+    private readonly cache: MemoryCacheService,
   ) {}
 
   async findAll(rawPage?: number | string, rawPageSize?: number | string) {
@@ -69,7 +71,9 @@ export class UsersService {
 
   async toggleActive(id: number, active: boolean) {
     await this.repo.update({ id }, { active });
-    return this.repo.findOne({ where: { id } });
+    const user = await this.repo.findOne({ where: { id } });
+    this._invalidateAdminCaches();
+    return user;
   }
 
   async pushSync(payload: {
@@ -109,6 +113,7 @@ export class UsersService {
     user.syncPayloadJson = JSON.stringify(payload.payload ?? {});
 
     const saved = await this.repo.save(user);
+    this._invalidateAdminCaches();
     return {
       success: true,
       userId: saved.id,
@@ -142,59 +147,65 @@ export class UsersService {
   }
 
   async getSyncAggregateSummary() {
-    const users = await this.repo.find({
-      select: {
-        active: true,
-        syncPayloadJson: true,
-        syncUpdatedAt: true,
-      },
+    return this.cache.getOrSet('admin:sync-aggregate', 10_000, async () => {
+      const users = await this.repo.find({
+        select: {
+          active: true,
+          syncPayloadJson: true,
+          syncUpdatedAt: true,
+        },
+      });
+
+      let syncedUsers = 0;
+      let activeSyncedUsers = 0;
+      let totalNotes = 0;
+      let totalFavoritePages = 0;
+      let totalBookmarks = 0;
+      let totalHistoryEntries = 0;
+      let totalHifzEntries = 0;
+      let latestSyncAt: Date | null = null;
+
+      for (const user of users) {
+        const hasSync = !!user.syncPayloadJson?.trim();
+        if (!hasSync) {
+          continue;
+        }
+
+        syncedUsers += 1;
+        if (user.active) {
+          activeSyncedUsers += 1;
+        }
+
+        const summary = this._summarizePayload(this._parsePayload(user.syncPayloadJson));
+        totalNotes += summary.notesCount;
+        totalFavoritePages += summary.favoritePagesCount;
+        totalBookmarks += summary.bookmarksCount;
+        totalHistoryEntries += summary.historyCount;
+        totalHifzEntries += summary.hifzCount;
+
+        if (
+          user.syncUpdatedAt &&
+          (latestSyncAt == null || user.syncUpdatedAt > latestSyncAt)
+        ) {
+          latestSyncAt = user.syncUpdatedAt;
+        }
+      }
+
+      return {
+        syncedUsers,
+        activeSyncedUsers,
+        totalNotes,
+        totalFavoritePages,
+        totalBookmarks,
+        totalHistoryEntries,
+        totalHifzEntries,
+        latestSyncAt,
+      };
     });
+  }
 
-    let syncedUsers = 0;
-    let activeSyncedUsers = 0;
-    let totalNotes = 0;
-    let totalFavoritePages = 0;
-    let totalBookmarks = 0;
-    let totalHistoryEntries = 0;
-    let totalHifzEntries = 0;
-    let latestSyncAt: Date | null = null;
-
-    for (const user of users) {
-      const hasSync = !!user.syncPayloadJson?.trim();
-      if (!hasSync) {
-        continue;
-      }
-
-      syncedUsers += 1;
-      if (user.active) {
-        activeSyncedUsers += 1;
-      }
-
-      const summary = this._summarizePayload(this._parsePayload(user.syncPayloadJson));
-      totalNotes += summary.notesCount;
-      totalFavoritePages += summary.favoritePagesCount;
-      totalBookmarks += summary.bookmarksCount;
-      totalHistoryEntries += summary.historyCount;
-      totalHifzEntries += summary.hifzCount;
-
-      if (
-        user.syncUpdatedAt &&
-        (latestSyncAt == null || user.syncUpdatedAt > latestSyncAt)
-      ) {
-        latestSyncAt = user.syncUpdatedAt;
-      }
-    }
-
-    return {
-      syncedUsers,
-      activeSyncedUsers,
-      totalNotes,
-      totalFavoritePages,
-      totalBookmarks,
-      totalHistoryEntries,
-      totalHifzEntries,
-      latestSyncAt,
-    };
+  private _invalidateAdminCaches() {
+    this.cache.deleteByPrefix('admin:');
   }
 
   private _parsePayload(jsonPayload: string | null) {

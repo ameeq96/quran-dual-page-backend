@@ -4,6 +4,7 @@ import AdmZip from 'adm-zip';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Repository } from 'typeorm';
+import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { AssetPack } from '../entities/asset_pack.entity';
 import {
   buildPaginatedResponse,
@@ -34,6 +35,12 @@ type PackInspection = {
   pages: PackPage[];
 };
 
+type CachedPackInspection = {
+  directoryMtimeMs: number;
+  inspection: PackInspection;
+  fileLookup: Map<number, { absolutePath: string; contentType: string }>;
+};
+
 const EDITION_PROFILES: Record<string, EditionProfile> = {
   '10_line': { folderName: '10_line', leadingPagesToSkip: 0 },
   '13_line': { folderName: '13_line', leadingPagesToSkip: 0 },
@@ -46,9 +53,12 @@ const EDITION_PROFILES: Record<string, EditionProfile> = {
 
 @Injectable()
 export class AssetPacksService {
+  private readonly inspectionCache = new Map<string, CachedPackInspection>();
+
   constructor(
     @InjectRepository(AssetPack)
     private readonly repo: Repository<AssetPack>,
+    private readonly cache: MemoryCacheService,
   ) {}
 
   async list(rawPage?: number | string, rawPageSize?: number | string) {
@@ -66,8 +76,13 @@ export class AssetPacksService {
   }
 
   async activePacks() {
-    const packs = await this.repo.find({ where: { active: true }, order: { edition: 'ASC' } });
-    return Promise.all(packs.map((pack) => this._summarizePack(pack)));
+    return this.cache.getOrSet('asset-packs:active', 10_000, async () => {
+      const packs = await this.repo.find({
+        where: { active: true },
+        order: { edition: 'ASC' },
+      });
+      return Promise.all(packs.map((pack) => this._summarizePack(pack)));
+    });
   }
 
   async uploadPack(edition: string, version: string, filePath: string) {
@@ -91,7 +106,12 @@ export class AssetPacksService {
       throw new BadRequestException('No valid page images found in uploaded pack.');
     }
 
-    return this._syncPackMetadata(normalizedEdition, normalizedVersion);
+    const syncedPack = await this._syncPackMetadata(
+      normalizedEdition,
+      normalizedVersion,
+    );
+    this._invalidatePackCaches(normalizedEdition, normalizedVersion);
+    return syncedPack;
   }
 
   async uploadPage(
@@ -139,7 +159,12 @@ export class AssetPacksService {
       fs.rmSync(filePath, { force: true });
     }
 
-    return this._syncPackMetadata(normalizedEdition, normalizedVersion);
+    const syncedPack = await this._syncPackMetadata(
+      normalizedEdition,
+      normalizedVersion,
+    );
+    this._invalidatePackCaches(normalizedEdition, normalizedVersion);
+    return syncedPack;
   }
 
   async importFromMobileAssets(
@@ -184,6 +209,7 @@ export class AssetPacksService {
         if (activePack) {
           importedPacks.push(await this._decoratePack(activePack));
         }
+        this._invalidatePackCaches(edition, normalizedVersion);
       }
     }
 
@@ -219,6 +245,7 @@ export class AssetPacksService {
       throw new NotFoundException('Asset pack not found after activation.');
     }
 
+    this._invalidatePackCaches(normalizedEdition, normalizedVersion);
     return this._decoratePack(updated);
   }
 
@@ -287,7 +314,12 @@ export class AssetPacksService {
       throw new NotFoundException('Requested page image was not found in this pack.');
     }
 
-    return this._syncPackMetadata(normalizedEdition, normalizedVersion);
+    const syncedPack = await this._syncPackMetadata(
+      normalizedEdition,
+      normalizedVersion,
+    );
+    this._invalidatePackCaches(normalizedEdition, normalizedVersion);
+    return syncedPack;
   }
 
   async updatePage(
@@ -395,7 +427,12 @@ export class AssetPacksService {
       }
     }
 
-    return this._syncPackMetadata(normalizedEdition, normalizedVersion);
+    const syncedPack = await this._syncPackMetadata(
+      normalizedEdition,
+      normalizedVersion,
+    );
+    this._invalidatePackCaches(normalizedEdition, normalizedVersion);
+    return syncedPack;
   }
 
   resolvePageFile(
@@ -411,27 +448,16 @@ export class AssetPacksService {
       throw new BadRequestException('Imported page number must be a positive integer.');
     }
 
-    const directory = this._packDirectory(normalizedEdition, normalizedVersion);
-    if (!fs.existsSync(directory)) {
-      throw new NotFoundException('Requested asset pack version was not found.');
+    const file = this._getCachedInspection(
+      normalizedEdition,
+      normalizedVersion,
+    ).fileLookup.get(normalizedImportedPage);
+
+    if (!file) {
+      throw new NotFoundException('Requested Quran page image was not found.');
     }
 
-    const paddedBaseName = normalizedImportedPage.toString().padStart(3, '0');
-    const rawBaseName = normalizedImportedPage.toString();
-
-    for (const extension of IMAGE_EXTENSIONS) {
-      for (const candidateBaseName of [paddedBaseName, rawBaseName]) {
-        const absolutePath = path.join(directory, `${candidateBaseName}.${extension}`);
-        if (fs.existsSync(absolutePath)) {
-          return {
-            absolutePath,
-            contentType: this._contentTypeForExtension(extension),
-          };
-        }
-      }
-    }
-
-    throw new NotFoundException('Requested Quran page image was not found.');
+    return file;
   }
 
   private async _decoratePack(pack: AssetPack) {
@@ -501,18 +527,45 @@ export class AssetPacksService {
   }
 
   private _inspectPack(edition: string, version: string): PackInspection {
+    return this._getCachedInspection(edition, version).inspection;
+  }
+
+  private _getCachedInspection(
+    edition: string,
+    version: string,
+  ): CachedPackInspection {
     const profile = this._profileForEdition(edition);
     const directory = this._packDirectory(edition, version);
+    const cacheKey = `${edition}:${version}`;
+    const directoryMtimeMs = fs.existsSync(directory)
+      ? fs.statSync(directory).mtimeMs
+      : -1;
+
+    const cached = this.inspectionCache.get(cacheKey);
+    if (cached && cached.directoryMtimeMs === directoryMtimeMs) {
+      return cached;
+    }
 
     if (!fs.existsSync(directory)) {
-      return {
-        pageCount: 0,
-        fileExtension: 'png',
-        sizeBytes: 0,
-        availableImportedPages: [],
-        pages: [],
+      const emptyEntry: CachedPackInspection = {
+        directoryMtimeMs,
+        inspection: {
+          pageCount: 0,
+          fileExtension: 'png',
+          sizeBytes: 0,
+          availableImportedPages: [],
+          pages: [],
+        },
+        fileLookup: new Map(),
       };
+      this.inspectionCache.set(cacheKey, emptyEntry);
+      return emptyEntry;
     }
+
+    const fileLookup = new Map<
+      number,
+      { absolutePath: string; contentType: string }
+    >();
 
     const pageFiles = fs
       .readdirSync(directory, { withFileTypes: true })
@@ -529,11 +582,17 @@ export class AssetPacksService {
           return null;
         }
 
-        const stats = fs.statSync(path.join(directory, entry.name));
+        const absolutePath = path.join(directory, entry.name);
+        const stats = fs.statSync(absolutePath);
         const logicalPageNumber = Math.max(
           1,
           importedPageNumber - profile.leadingPagesToSkip,
         );
+
+        fileLookup.set(importedPageNumber, {
+          absolutePath,
+          contentType: this._contentTypeForExtension(extension),
+        });
 
         return {
           logicalPageNumber,
@@ -551,13 +610,22 @@ export class AssetPacksService {
     const totalBytes = pageFiles.reduce((sum, entry) => sum + entry.sizeBytes, 0);
     const firstExtension = pageFiles[0]?.fileExtension ?? 'png';
 
-    return {
+    const inspection: PackInspection = {
       pageCount: availableImportedPages[availableImportedPages.length - 1] ?? 0,
       fileExtension: firstExtension,
       sizeBytes: totalBytes,
       availableImportedPages,
       pages: pageFiles.map(({ sizeBytes: _, ...entry }) => entry),
     };
+
+    const cacheEntry: CachedPackInspection = {
+      directoryMtimeMs,
+      inspection,
+      fileLookup,
+    };
+
+    this.inspectionCache.set(cacheKey, cacheEntry);
+    return cacheEntry;
   }
 
   private _flattenImportedImages(directory: string) {
@@ -703,5 +771,12 @@ export class AssetPacksService {
     }
 
     return [];
+  }
+
+  private _invalidatePackCaches(edition: string, version: string) {
+    this.inspectionCache.delete(`${edition}:${version}`);
+    this.cache.delete('asset-packs:active');
+    this.cache.deleteByPrefix('public-config:');
+    this.cache.deleteByPrefix('admin:');
   }
 }

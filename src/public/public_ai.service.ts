@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as http from 'http';
 import * as https from 'https';
 import { Repository } from 'typeorm';
+import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { AppSetting } from '../entities/app_setting.entity';
 
 type AdminAiRunRequest = {
@@ -28,11 +29,22 @@ type RuntimeConfig = {
   customHeaders: Record<string, string>;
 };
 
+const HTTP_KEEP_ALIVE_AGENT = new http.Agent({
+  keepAlive: true,
+  maxSockets: 32,
+});
+
+const HTTPS_KEEP_ALIVE_AGENT = new https.Agent({
+  keepAlive: true,
+  maxSockets: 32,
+});
+
 @Injectable()
 export class PublicAiService {
   constructor(
     @InjectRepository(AppSetting)
     private readonly settingsRepo: Repository<AppSetting>,
+    private readonly cache: MemoryCacheService,
   ) {}
 
   async runTool(request: AdminAiRunRequest) {
@@ -208,23 +220,25 @@ export class PublicAiService {
   }
 
   private async loadRuntimeConfig(): Promise<RuntimeConfig> {
-    const settings = await this.settingsRepo.find();
-    const values = new Map(settings.map((entry) => [entry.key, entry.value]));
-    const rawProvider = (values.get('ai_provider') ?? 'local').trim();
-    const provider = this.normalizeProvider(rawProvider);
+    return this.cache.getOrSet('public-ai:runtime-config', 15_000, async () => {
+      const settings = await this.settingsRepo.find();
+      const values = new Map(settings.map((entry) => [entry.key, entry.value]));
+      const rawProvider = (values.get('ai_provider') ?? 'local').trim();
+      const provider = this.normalizeProvider(rawProvider);
 
-    return {
-      provider,
-      providerLabel: this.providerLabel(provider, rawProvider),
-      model: (values.get('ai_model') ?? '').trim(),
-      endpoint: (values.get('ai_endpoint') ?? '').trim(),
-      secret: (values.get('ai_secret') ?? '').trim(),
-      statusLabel: (values.get('ai_status_label') ?? '').trim(),
-      systemPrompt: (values.get('ai_system_prompt') ?? '').trim(),
-      customHeaders: this.parseCustomHeaders(
-        values.get('ai_custom_headers_json') ?? '',
-      ),
-    };
+      return {
+        provider,
+        providerLabel: this.providerLabel(provider, rawProvider),
+        model: (values.get('ai_model') ?? '').trim(),
+        endpoint: (values.get('ai_endpoint') ?? '').trim(),
+        secret: (values.get('ai_secret') ?? '').trim(),
+        statusLabel: (values.get('ai_status_label') ?? '').trim(),
+        systemPrompt: (values.get('ai_system_prompt') ?? '').trim(),
+        customHeaders: this.parseCustomHeaders(
+          values.get('ai_custom_headers_json') ?? '',
+        ),
+      };
+    });
   }
 
   private normalizeProvider(rawProvider: string): NormalizedProvider {
@@ -304,6 +318,8 @@ export class PublicAiService {
         url,
         {
           method: 'POST',
+          agent:
+            url.protocol === 'https:' ? HTTPS_KEEP_ALIVE_AGENT : HTTP_KEEP_ALIVE_AGENT,
           headers: {
             ...headers,
             'Content-Length': Buffer.byteLength(payload).toString(),

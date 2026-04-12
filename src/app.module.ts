@@ -13,11 +13,13 @@ import { SettingsModule } from './settings/settings.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AssetPacksModule } from './asset_packs/asset_packs.module';
 import { ContentDatasetsModule } from './content_datasets/content_datasets.module';
+import { MemoryCacheModule } from './common/cache/memory-cache.module';
 import { PublicModule } from './public/public.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    MemoryCacheModule,
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), 'storage'),
       serveRoot: '/assets',

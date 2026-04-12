@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { Announcement } from '../entities/announcement.entity';
 import {
   buildPaginatedResponse,
@@ -12,6 +13,7 @@ export class AnnouncementsService {
   constructor(
     @InjectRepository(Announcement)
     private readonly repo: Repository<Announcement>,
+    private readonly cache: MemoryCacheService,
   ) {}
 
   async findAll(rawPage?: number | string, rawPageSize?: number | string) {
@@ -27,12 +29,21 @@ export class AnnouncementsService {
     return buildPaginatedResponse(items, totalItems, page, pageSize);
   }
 
-  upsert(payload: Partial<Announcement>) {
-    return this.repo.save(payload);
+  async upsert(payload: Partial<Announcement>) {
+    const saved = await this.repo.save(payload);
+    this._invalidateCaches();
+    return saved;
   }
 
   async toggle(id: number, active: boolean) {
     await this.repo.update({ id }, { active });
-    return this.repo.findOne({ where: { id } });
+    const announcement = await this.repo.findOne({ where: { id } });
+    this._invalidateCaches();
+    return announcement;
+  }
+
+  private _invalidateCaches() {
+    this.cache.deleteByPrefix('public-config:');
+    this.cache.deleteByPrefix('admin:');
   }
 }

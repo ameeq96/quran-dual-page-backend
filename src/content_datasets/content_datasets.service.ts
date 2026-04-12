@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Repository } from 'typeorm';
+import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { ContentDataset } from '../entities/content_dataset.entity';
 import {
   buildPaginatedResponse,
@@ -14,6 +15,7 @@ export class ContentDatasetsService {
   constructor(
     @InjectRepository(ContentDataset)
     private readonly repo: Repository<ContentDataset>,
+    private readonly cache: MemoryCacheService,
   ) {}
 
   async list(rawPage?: number | string, rawPageSize?: number | string) {
@@ -53,6 +55,7 @@ export class ContentDatasetsService {
     );
 
     fs.rmSync(filePath, { force: true });
+    this._invalidateCaches();
     return dataset;
   }
 
@@ -62,10 +65,19 @@ export class ContentDatasetsService {
       dataset.active = dataset.version === version;
     }
     await this.repo.save(datasets);
+    this._invalidateCaches();
     return this.repo.findOne({ where: { key, version } });
   }
 
   activeDatasets() {
-    return this.repo.find({ where: { active: true } });
+    return this.cache.getOrSet('content-datasets:active', 10_000, () =>
+      this.repo.find({ where: { active: true } }),
+    );
+  }
+
+  private _invalidateCaches() {
+    this.cache.delete('content-datasets:active');
+    this.cache.deleteByPrefix('public-config:');
+    this.cache.deleteByPrefix('admin:');
   }
 }
