@@ -15,7 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import { JwtAuthGuard } from '../common/auth/jwt.guard';
-import { ensureStorageDirectory } from '../common/storage/storage-paths';
+import { ensureStorageDirectory } from '../common/storage-paths';
 import { AssetPacksService } from './asset_packs.service';
 
 @Controller('asset-packs')

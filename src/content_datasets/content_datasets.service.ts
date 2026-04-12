@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Repository } from 'typeorm';
 import { MemoryCacheService } from '../common/cache/memory-cache.service';
-import { storagePath } from '../common/storage/storage-paths';
+import { storagePath } from '../common/storage-paths';
 import { ContentDataset } from '../entities/content_dataset.entity';
 import {
   buildPaginatedResponse,

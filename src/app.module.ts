@@ -14,7 +14,7 @@ import { AssetPacksModule } from './asset_packs/asset_packs.module';
 import { ContentDatasetsModule } from './content_datasets/content_datasets.module';
 import { MemoryCacheModule } from './common/cache/memory-cache.module';
 import { PublicModule } from './public/public.module';
-import { storageRoot } from './common/storage/storage-paths';
+import { storageRoot } from './common/storage-paths';
 
 @Module({
   imports: [

@@ -12,7 +12,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { JwtAuthGuard } from '../common/auth/jwt.guard';
-import { ensureStorageDirectory } from '../common/storage/storage-paths';
+import { ensureStorageDirectory } from '../common/storage-paths';
 import { ContentDatasetsService } from './content_datasets.service';
 
 @Controller('content-datasets')
