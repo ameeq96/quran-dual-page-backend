@@ -3,22 +3,21 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Announcement } from '../entities/announcement.entity';
 import { AppSetting } from '../entities/app_setting.entity';
-import { ContentDataset } from '../entities/content_dataset.entity';
 import { Edition } from '../entities/edition.entity';
 import { FeatureFlag } from '../entities/feature_flag.entity';
 import { Request, Response } from 'express';
 import { AssetPacksService } from '../asset_packs/asset_packs.service';
 import { MemoryCacheService } from '../common/cache/memory-cache.service';
+import { ContentDatasetsService } from '../content_datasets/content_datasets.service';
 import { PublicAiService } from './public_ai.service';
 
 @Controller('public')
 export class PublicController {
   constructor(
     private readonly assetPacksService: AssetPacksService,
+    private readonly contentDatasetsService: ContentDatasetsService,
     private readonly publicAiService: PublicAiService,
     private readonly cache: MemoryCacheService,
-    @InjectRepository(ContentDataset)
-    private readonly contentDatasets: Repository<ContentDataset>,
     @InjectRepository(Announcement)
     private readonly announcements: Repository<Announcement>,
     @InjectRepository(Edition) private readonly editions: Repository<Edition>,
@@ -32,35 +31,45 @@ export class PublicController {
     const host = req.get('host');
     const cacheKey = `public-config:${proto}:${host ?? 'unknown-host'}`;
 
-    return this.cache.getOrSet(cacheKey, 5_000, async () => {
-      const assetsBaseUrl = host ? `${proto}://${host}/public/pages` : '';
+    return this.cache.getOrSet(cacheKey, 60_000, async () => {
+      const publicBaseUrl = host ? `${proto}://${host}` : '';
+      const assetsBaseUrl = publicBaseUrl ? `${publicBaseUrl}/assets` : '';
 
       const [activePacks, activeDatasets, editions, settings, flags, announcements] =
         await Promise.all([
           this.assetPacksService.activePacks(),
-          this.contentDatasets.find({ where: { active: true } }),
-          this.editions.find({ order: { id: 'ASC' } }),
-          this.settings.find(),
-          this.flags.find(),
-          this.announcements.find({ where: { active: true } }),
+          this.contentDatasetsService.activeDatasets(),
+          this.editions.find({
+            order: { id: 'ASC' },
+            select: { key: true, label: true, enabled: true },
+          }),
+          this.settings.find({ select: { key: true, value: true } }),
+          this.flags.find({ select: { key: true, enabled: true } }),
+          this.announcements.find({
+            where: { active: true },
+            select: { id: true, title: true, body: true, publishAt: true },
+          }),
         ]);
 
       return {
         assetsBaseUrl,
         assetPacks: activePacks.map((pack) => ({
           edition: pack.edition,
+          folderName: pack.folderName,
           version: pack.version,
           pageCount: pack.pageCount,
           fileExtension: pack.fileExtension,
-          availableImportedPages: this._explicitImportedPagesForPack(
+          ...this._compactImportedPagesForPack(
             pack.availableImportedPages,
-            pack.pageCount,
+            pack.pageCount > 0
+                ? pack.availableImportedPages[0] ?? 1
+                : null,
           ),
         })),
         contentDatasets: activeDatasets.map((dataset) => ({
           key: dataset.key,
           version: dataset.version,
-          url: host ? `${proto}://${host}${dataset.publicPath}` : dataset.publicPath,
+          url: publicBaseUrl ? `${publicBaseUrl}${dataset.publicPath}` : dataset.publicPath,
         })),
         editions: editions.map((edition) => ({
           key: edition.key,
@@ -134,20 +143,36 @@ export class PublicController {
     return true;
   }
 
-  private _explicitImportedPagesForPack(
+  private _compactImportedPagesForPack(
     availableImportedPages: number[],
-    pageCount: number,
+    firstImportedPageNumber: number | null,
   ) {
-    if (availableImportedPages.length !== pageCount) {
-      return availableImportedPages;
+    if (availableImportedPages.length === 0) {
+      return {
+        availableImportedPages,
+        contiguousImportedPageStart: null,
+        contiguousImportedPageEnd: null,
+      };
     }
 
+    const normalizedStart = firstImportedPageNumber ?? availableImportedPages[0];
+    const lastImportedPageNumber =
+      availableImportedPages[availableImportedPages.length - 1];
+
     for (let index = 0; index < availableImportedPages.length; index += 1) {
-      if (availableImportedPages[index] !== index + 1) {
-        return availableImportedPages;
+      if (availableImportedPages[index] !== normalizedStart + index) {
+        return {
+          availableImportedPages,
+          contiguousImportedPageStart: null,
+          contiguousImportedPageEnd: null,
+        };
       }
     }
 
-    return [];
+    return {
+      availableImportedPages: [] as number[],
+      contiguousImportedPageStart: normalizedStart,
+      contiguousImportedPageEnd: lastImportedPageNumber,
+    };
   }
 }

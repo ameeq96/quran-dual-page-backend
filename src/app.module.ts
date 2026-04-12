@@ -23,6 +23,15 @@ import { storageRoot } from './common/storage-paths';
     ServeStaticModule.forRoot({
       rootPath: storageRoot,
       serveRoot: '/assets',
+      serveStaticOptions: {
+        cacheControl: true,
+        etag: true,
+        fallthrough: false,
+        immutable: true,
+        index: false,
+        lastModified: true,
+        maxAge: '365d',
+      },
     }),
     TypeOrmModule.forRoot({
       type: 'mysql',

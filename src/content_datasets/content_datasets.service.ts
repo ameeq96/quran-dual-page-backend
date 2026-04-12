@@ -71,8 +71,11 @@ export class ContentDatasetsService {
   }
 
   activeDatasets() {
-    return this.cache.getOrSet('content-datasets:active', 10_000, () =>
-      this.repo.find({ where: { active: true } }),
+    return this.cache.getOrSet('content-datasets:active', 300_000, () =>
+      this.repo.find({
+        where: { active: true },
+        select: { key: true, version: true, publicPath: true },
+      }),
     );
   }
 

@@ -37,7 +37,6 @@ type PackInspection = {
 };
 
 type CachedPackInspection = {
-  directoryMtimeMs: number;
   inspection: PackInspection;
   fileLookup: Map<number, { absolutePath: string; contentType: string }>;
 };
@@ -77,7 +76,7 @@ export class AssetPacksService {
   }
 
   async activePacks() {
-    return this.cache.getOrSet('asset-packs:active', 10_000, async () => {
+    return this.cache.getOrSet('asset-packs:active', 300_000, async () => {
       const packs = await this.repo.find({
         where: { active: true },
         order: { edition: 'ASC' },
@@ -449,10 +448,22 @@ export class AssetPacksService {
       throw new BadRequestException('Imported page number must be a positive integer.');
     }
 
-    const file = this._getCachedInspection(
+    const cacheKey = this._inspectionCacheKey(
+      normalizedEdition,
+      normalizedVersion,
+    );
+    let file = this._getCachedInspection(
       normalizedEdition,
       normalizedVersion,
     ).fileLookup.get(normalizedImportedPage);
+
+    if (!file) {
+      this.inspectionCache.delete(cacheKey);
+      file = this._getCachedInspection(
+        normalizedEdition,
+        normalizedVersion,
+      ).fileLookup.get(normalizedImportedPage);
+    }
 
     if (!file) {
       throw new NotFoundException('Requested Quran page image was not found.');
@@ -463,9 +474,11 @@ export class AssetPacksService {
 
   private async _decoratePack(pack: AssetPack) {
     const inspection = this._inspectPack(pack.edition, pack.version);
+    const profile = this._profileForEdition(pack.edition);
     return {
       id: pack.id,
       edition: pack.edition,
+      folderName: profile.folderName,
       version: pack.version,
       active: pack.active,
       storagePath: pack.storagePath,
@@ -479,9 +492,11 @@ export class AssetPacksService {
 
   private async _summarizePack(pack: AssetPack) {
     const inspection = this._inspectPack(pack.edition, pack.version);
+    const profile = this._profileForEdition(pack.edition);
     return {
       id: pack.id,
       edition: pack.edition,
+      folderName: profile.folderName,
       version: pack.version,
       active: pack.active,
       storagePath: pack.storagePath,
@@ -535,21 +550,18 @@ export class AssetPacksService {
     edition: string,
     version: string,
   ): CachedPackInspection {
-    const profile = this._profileForEdition(edition);
-    const directory = this._packDirectory(edition, version);
-    const cacheKey = `${edition}:${version}`;
-    const directoryMtimeMs = fs.existsSync(directory)
-      ? fs.statSync(directory).mtimeMs
-      : -1;
+    const cacheKey = this._inspectionCacheKey(edition, version);
 
     const cached = this.inspectionCache.get(cacheKey);
-    if (cached && cached.directoryMtimeMs === directoryMtimeMs) {
+    if (cached) {
       return cached;
     }
 
+    const profile = this._profileForEdition(edition);
+    const directory = this._packDirectory(edition, version);
+
     if (!fs.existsSync(directory)) {
       const emptyEntry: CachedPackInspection = {
-        directoryMtimeMs,
         inspection: {
           pageCount: 0,
           fileExtension: 'png',
@@ -620,7 +632,6 @@ export class AssetPacksService {
     };
 
     const cacheEntry: CachedPackInspection = {
-      directoryMtimeMs,
       inspection,
       fileLookup,
     };
@@ -774,8 +785,12 @@ export class AssetPacksService {
     return [];
   }
 
+  private _inspectionCacheKey(edition: string, version: string) {
+    return `${edition}:${version}`;
+  }
+
   private _invalidatePackCaches(edition: string, version: string) {
-    this.inspectionCache.delete(`${edition}:${version}`);
+    this.inspectionCache.delete(this._inspectionCacheKey(edition, version));
     this.cache.delete('asset-packs:active');
     this.cache.deleteByPrefix('public-config:');
     this.cache.deleteByPrefix('admin:');
