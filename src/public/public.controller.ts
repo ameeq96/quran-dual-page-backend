@@ -1,12 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Announcement } from '../entities/announcement.entity';
 import { AppSetting } from '../entities/app_setting.entity';
 import { Edition } from '../entities/edition.entity';
 import { FeatureFlag } from '../entities/feature_flag.entity';
-import { Request, Response } from 'express';
-import { AssetPacksService } from '../asset_packs/asset_packs.service';
+import { Request } from 'express';
 import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { ContentDatasetsService } from '../content_datasets/content_datasets.service';
 import { PublicAiService } from './public_ai.service';
@@ -15,7 +14,6 @@ import { PublicSearchService } from './public_search.service';
 @Controller('public')
 export class PublicController {
   constructor(
-    private readonly assetPacksService: AssetPacksService,
     private readonly contentDatasetsService: ContentDatasetsService,
     private readonly publicAiService: PublicAiService,
     private readonly publicSearchService: PublicSearchService,
@@ -37,9 +35,8 @@ export class PublicController {
       const publicBaseUrl = host ? `${proto}://${host}` : '';
       const assetsBaseUrl = publicBaseUrl ? `${publicBaseUrl}/assets` : '';
 
-      const [activePacks, activeDatasets, editions, settings, flags, announcements] =
+      const [activeDatasets, editions, settings, flags, announcements] =
         await Promise.all([
-          this.assetPacksService.activePacks(),
           this.contentDatasetsService.activeDatasets(),
           this.editions.find({
             order: { id: 'ASC' },
@@ -55,19 +52,7 @@ export class PublicController {
 
       return {
         assetsBaseUrl,
-        assetPacks: activePacks.map((pack) => ({
-          edition: pack.edition,
-          folderName: pack.folderName,
-          version: pack.version,
-          pageCount: pack.pageCount,
-          fileExtension: pack.fileExtension,
-          ...this._compactImportedPagesForPack(
-            pack.availableImportedPages,
-            pack.pageCount > 0
-                ? pack.availableImportedPages[0] ?? 1
-                : null,
-          ),
-        })),
+        assetPacks: [],
         contentDatasets: activeDatasets.map((dataset) => ({
           key: dataset.key,
           version: dataset.version,
@@ -149,23 +134,6 @@ export class PublicController {
     );
   }
 
-  @Get('pages/:edition/:version/:importedPageNumber')
-  sendPageImage(
-    @Param('edition') edition: string,
-    @Param('version') version: string,
-    @Param('importedPageNumber') importedPageNumber: string,
-    @Res() res: Response,
-  ) {
-    const pageFile = this.assetPacksService.resolvePageFile(
-      edition,
-      version,
-      Number(importedPageNumber),
-    );
-    res.type(pageFile.contentType);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    return res.sendFile(pageFile.absolutePath);
-  }
-
   private _isPublicSetting(key: string) {
     const normalized = key.trim().toLowerCase();
     if (!normalized) {
@@ -185,36 +153,5 @@ export class PublicController {
     return true;
   }
 
-  private _compactImportedPagesForPack(
-    availableImportedPages: number[],
-    firstImportedPageNumber: number | null,
-  ) {
-    if (availableImportedPages.length === 0) {
-      return {
-        availableImportedPages,
-        contiguousImportedPageStart: null,
-        contiguousImportedPageEnd: null,
-      };
-    }
-
-    const normalizedStart = firstImportedPageNumber ?? availableImportedPages[0];
-    const lastImportedPageNumber =
-      availableImportedPages[availableImportedPages.length - 1];
-
-    for (let index = 0; index < availableImportedPages.length; index += 1) {
-      if (availableImportedPages[index] !== normalizedStart + index) {
-        return {
-          availableImportedPages,
-          contiguousImportedPageStart: null,
-          contiguousImportedPageEnd: null,
-        };
-      }
-    }
-
-    return {
-      availableImportedPages: [] as number[],
-      contiguousImportedPageStart: normalizedStart,
-      contiguousImportedPageEnd: lastImportedPageNumber,
-    };
-  }
+  // asset pack endpoints removed; server no longer serves page images
 }

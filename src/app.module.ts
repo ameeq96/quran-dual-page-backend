@@ -10,7 +10,6 @@ import { EditionsModule } from './editions/editions.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { SettingsModule } from './settings/settings.module';
 import { AnalyticsModule } from './analytics/analytics.module';
-import { AssetPacksModule } from './asset_packs/asset_packs.module';
 import { ContentDatasetsModule } from './content_datasets/content_datasets.module';
 import { MemoryCacheModule } from './common/cache/memory-cache.module';
 import { PublicModule } from './public/public.module';
@@ -52,7 +51,6 @@ import { storageRoot } from './common/storage-paths';
     AnnouncementsModule,
     SettingsModule,
     AnalyticsModule,
-    AssetPacksModule,
     ContentDatasetsModule,
     PublicModule,
   ],

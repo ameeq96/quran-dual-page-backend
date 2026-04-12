@@ -5,7 +5,6 @@ import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { Announcement } from '../entities/announcement.entity';
 import { AppSetting } from '../entities/app_setting.entity';
 import { AppUser } from '../entities/app_user.entity';
-import { AssetPack } from '../entities/asset_pack.entity';
 import { ContentDataset } from '../entities/content_dataset.entity';
 import { Edition } from '../entities/edition.entity';
 import { FeatureFlag } from '../entities/feature_flag.entity';
@@ -17,8 +16,6 @@ export class AdminService {
     private readonly usersRepo: Repository<AppUser>,
     @InjectRepository(Edition)
     private readonly editionsRepo: Repository<Edition>,
-    @InjectRepository(AssetPack)
-    private readonly assetPacksRepo: Repository<AssetPack>,
     @InjectRepository(ContentDataset)
     private readonly contentDatasetsRepo: Repository<ContentDataset>,
     @InjectRepository(Announcement)
@@ -38,8 +35,6 @@ export class AdminService {
         syncSummary,
         totalEditions,
         enabledEditions,
-        totalAssetPacks,
-        activeAssetPacks,
         totalDatasets,
         activeDatasets,
         totalAnnouncements,
@@ -61,8 +56,6 @@ export class AdminService {
         this._buildSyncSummary(),
         this.editionsRepo.count(),
         this.editionsRepo.count({ where: { enabled: true } }),
-        this.assetPacksRepo.count(),
-        this.assetPacksRepo.count({ where: { active: true } }),
         this.contentDatasetsRepo.count(),
         this.contentDatasetsRepo.count({ where: { active: true } }),
         this.announcementsRepo.count(),
@@ -98,8 +91,8 @@ export class AdminService {
         totalSessions: 0,
         enabledEditions,
         totalEditions,
-        activeAssetPacks,
-        totalAssetPacks,
+        activeAssetPacks: 0,
+        totalAssetPacks: 0,
         activeDatasets,
         totalDatasets,
         activeAnnouncements,
@@ -121,10 +114,9 @@ export class AdminService {
 
   async getContentStatus() {
     return this.cache.getOrSet('admin:content-status', 10_000, async () => {
-      const [editions, assetPacks, contentDatasets, flags, settings, announcements] =
+      const [editions, contentDatasets, flags, settings, announcements] =
         await Promise.all([
           this.editionsRepo.find({ order: { id: 'ASC' } }),
-          this.assetPacksRepo.find({ where: { active: true }, order: { edition: 'ASC' } }),
           this.contentDatasetsRepo.find({ where: { active: true }, order: { key: 'ASC' } }),
           this.flagsRepo.find({ where: { enabled: true }, order: { key: 'ASC' } }),
           this.settingsRepo.find({ order: { key: 'ASC' } }),
@@ -134,12 +126,8 @@ export class AdminService {
       return {
         editionsAvailable: editions.filter((item) => item.enabled).map((item) => item.key),
         editions,
-        assetsOnDevice: assetPacks.length > 0,
-        assetPacks: assetPacks.map((item) => ({
-          edition: item.edition,
-          version: item.version,
-          pageCount: item.pageCount,
-        })),
+        assetsOnDevice: false,
+        assetPacks: [],
         contentDatasets: contentDatasets.map((item) => ({
           key: item.key,
           version: item.version,
