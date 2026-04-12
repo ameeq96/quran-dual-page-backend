@@ -11,8 +11,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import * as path from 'path';
 import { JwtAuthGuard } from '../common/auth/jwt.guard';
+import { ensureStorageDirectory } from '../common/storage/storage-paths';
 import { ContentDatasetsService } from './content_datasets.service';
 
 @Controller('content-datasets')
@@ -37,7 +37,7 @@ export class ContentDatasetsController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: path.join(process.cwd(), 'storage', 'tmp'),
+        destination: ensureStorageDirectory('tmp'),
         filename: (
           _: Express.Request,
           file: Express.Multer.File,

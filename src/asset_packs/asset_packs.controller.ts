@@ -15,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import * as path from 'path';
 import { JwtAuthGuard } from '../common/auth/jwt.guard';
+import { ensureStorageDirectory } from '../common/storage/storage-paths';
 import { AssetPacksService } from './asset_packs.service';
 
 @Controller('asset-packs')
@@ -51,7 +52,7 @@ export class AssetPacksController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: path.join(process.cwd(), 'storage', 'tmp'),
+        destination: ensureStorageDirectory('tmp'),
         filename: (_: Express.Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
           const timestamp = Date.now();
           const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -93,7 +94,7 @@ export class AssetPacksController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: path.join(process.cwd(), 'storage', 'tmp'),
+        destination: ensureStorageDirectory('tmp'),
         filename: (_: Express.Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
           const timestamp = Date.now();
           const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -137,7 +138,7 @@ export class AssetPacksController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: path.join(process.cwd(), 'storage', 'tmp'),
+        destination: ensureStorageDirectory('tmp'),
         filename: (_: Express.Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
           const timestamp = Date.now();
           const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');

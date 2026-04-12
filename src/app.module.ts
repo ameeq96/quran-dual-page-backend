@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { join } from 'path';
 import { HealthModule } from './health/health.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
@@ -15,13 +14,14 @@ import { AssetPacksModule } from './asset_packs/asset_packs.module';
 import { ContentDatasetsModule } from './content_datasets/content_datasets.module';
 import { MemoryCacheModule } from './common/cache/memory-cache.module';
 import { PublicModule } from './public/public.module';
+import { storageRoot } from './common/storage/storage-paths';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     MemoryCacheModule,
     ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), 'storage'),
+      rootPath: storageRoot,
       serveRoot: '/assets',
     }),
     TypeOrmModule.forRoot({

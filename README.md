@@ -25,6 +25,7 @@ HOST=0.0.0.0
 PORT=3000
 NODE_ENV=production
 APP_URL=https://adminapi.opplexify.com
+STORAGE_ROOT=/home/your-user/quran-admin-storage
 DB_HOST=your-db-host
 DB_PORT=3306
 DB_USER=your-db-user
@@ -42,7 +43,7 @@ Notes:
 
 - `npm install` will automatically run `npm run build` because of the `postinstall` script.
 - App startup command is `npm start`.
-- Static files inside `storage/` are served from `/assets`.
+- Static files inside `STORAGE_ROOT` are served from `/assets`.
 - Health check endpoint is `GET /health`.
 - Startup and crash logs now print to stdout/stderr, so they should appear in Hostinger logs.
 
@@ -62,6 +63,15 @@ npm install
 6. Add the environment variables from the section above in Hostinger.
 7. Create the MySQL database in Hostinger and use those credentials in the env vars.
 8. Restart the Node.js app from hPanel.
+
+Important for persistent uploads on Hostinger:
+
+- Set `STORAGE_ROOT` to a folder outside the deployed app directory.
+- Example:
+```env
+STORAGE_ROOT=/home/u765026793/quran-admin-storage
+```
+- Hostinger may replace the app directory during deploys. If `storage/` stays inside the app root, uploaded asset packs and datasets can be wiped. Moving `STORAGE_ROOT` outside the deploy root prevents that.
 
 After deployment, test:
 
@@ -121,4 +131,3 @@ PM2 log files:
 - `POST /settings`
 - `GET /settings/flags`
 - `PATCH /settings/flags/:id`
-

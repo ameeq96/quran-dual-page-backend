@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Repository } from 'typeorm';
 import { MemoryCacheService } from '../common/cache/memory-cache.service';
+import { storagePath } from '../common/storage/storage-paths';
 import { ContentDataset } from '../entities/content_dataset.entity';
 import {
   buildPaginatedResponse,
@@ -34,7 +35,7 @@ export class ContentDatasetsService {
   async uploadDataset(key: string, version: string, filePath: string) {
     const extension = path.extname(filePath).toLowerCase();
     const targetExtension = extension === '.json' ? '.json' : '.json';
-    const storageRoot = path.join(process.cwd(), 'storage', 'content_datasets', key);
+    const storageRoot = storagePath('content_datasets', key);
     fs.mkdirSync(storageRoot, { recursive: true });
 
     const targetPath = path.join(storageRoot, `${version}${targetExtension}`);

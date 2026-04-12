@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Repository } from 'typeorm';
 import { MemoryCacheService } from '../common/cache/memory-cache.service';
+import { storagePath } from '../common/storage/storage-paths';
 import { AssetPack } from '../entities/asset_pack.entity';
 import {
   buildPaginatedResponse,
@@ -716,7 +717,7 @@ export class AssetPacksService {
 
   private _packDirectory(edition: string, version: string) {
     const profile = this._profileForEdition(edition);
-    return path.join(process.cwd(), 'storage', 'asset_packs', profile.folderName, version);
+    return storagePath('asset_packs', profile.folderName, version);
   }
 
   private _normalizedExtension(filePath: string) {
