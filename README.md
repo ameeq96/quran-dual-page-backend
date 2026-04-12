@@ -23,12 +23,15 @@ Required environment variables:
 ```env
 HOST=0.0.0.0
 PORT=3000
+NODE_ENV=production
 APP_URL=https://adminapi.opplexify.com
 DB_HOST=your-db-host
 DB_PORT=3306
 DB_USER=your-db-user
 DB_PASS=your-db-password
 DB_NAME=your-db-name
+DB_SYNCHRONIZE=true
+DB_LOGGING=false
 JWT_SECRET=your-strong-secret
 JWT_EXPIRES_IN=7d
 ADMIN_SEED_EMAIL=admin@opplexify.com
@@ -41,6 +44,7 @@ Notes:
 - App startup command is `npm start`.
 - Static files inside `storage/` are served from `/assets`.
 - Health check endpoint is `GET /health`.
+- Startup and crash logs now print to stdout/stderr, so they should appear in Hostinger logs.
 
 ## Hostinger Deploy
 
