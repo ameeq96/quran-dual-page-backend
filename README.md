@@ -68,6 +68,41 @@ After deployment, test:
 - `https://adminapi.opplexify.com/health`
 - `https://adminapi.opplexify.com/auth/login`
 
+## PM2 Deploy
+
+If you are using a VPS or any server where you manage the process yourself:
+
+1. Upload the project.
+2. Create `.env` from `.env.example` and fill production values.
+3. Install dependencies:
+```bash
+npm install
+```
+4. Start with PM2:
+```bash
+npm run pm2:start
+```
+5. Save PM2 process list:
+```bash
+npx pm2 save
+```
+6. Enable PM2 startup on reboot:
+```bash
+npx pm2 startup
+```
+
+Useful PM2 commands:
+
+- `npm run pm2:logs`
+- `npm run pm2:restart`
+- `npm run pm2:stop`
+- `npx pm2 status`
+
+PM2 log files:
+
+- `logs/pm2-out.log`
+- `logs/pm2-error.log`
+
 ## Endpoints
 
 - `GET /health`
