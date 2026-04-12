@@ -8,12 +8,15 @@ import { FeatureFlag } from '../entities/feature_flag.entity';
 import { AssetPacksModule } from '../asset_packs/asset_packs.module';
 import { ContentDatasetsModule } from '../content_datasets/content_datasets.module';
 import { PublicAiService } from './public_ai.service';
+import { PublicSearchService } from './public_search.service';
+import { ContentDataset } from '../entities/content_dataset.entity';
 
 @Module({
   imports: [
     AssetPacksModule,
     ContentDatasetsModule,
     TypeOrmModule.forFeature([
+      ContentDataset,
       Announcement,
       AppSetting,
       Edition,
@@ -21,6 +24,6 @@ import { PublicAiService } from './public_ai.service';
     ]),
   ],
   controllers: [PublicController],
-  providers: [PublicAiService],
+  providers: [PublicAiService, PublicSearchService],
 })
 export class PublicModule {}

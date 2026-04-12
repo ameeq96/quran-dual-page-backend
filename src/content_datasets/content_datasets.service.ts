@@ -82,6 +82,7 @@ export class ContentDatasetsService {
   private _invalidateCaches() {
     this.cache.delete('content-datasets:active');
     this.cache.deleteByPrefix('public-config:');
+    this.cache.deleteByPrefix('public-search:');
     this.cache.deleteByPrefix('admin:');
   }
 }

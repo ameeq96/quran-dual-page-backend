@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, Res } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Announcement } from '../entities/announcement.entity';
@@ -10,6 +10,7 @@ import { AssetPacksService } from '../asset_packs/asset_packs.service';
 import { MemoryCacheService } from '../common/cache/memory-cache.service';
 import { ContentDatasetsService } from '../content_datasets/content_datasets.service';
 import { PublicAiService } from './public_ai.service';
+import { PublicSearchService } from './public_search.service';
 
 @Controller('public')
 export class PublicController {
@@ -17,6 +18,7 @@ export class PublicController {
     private readonly assetPacksService: AssetPacksService,
     private readonly contentDatasetsService: ContentDatasetsService,
     private readonly publicAiService: PublicAiService,
+    private readonly publicSearchService: PublicSearchService,
     private readonly cache: MemoryCacheService,
     @InjectRepository(Announcement)
     private readonly announcements: Repository<Announcement>,
@@ -105,6 +107,46 @@ export class PublicController {
     },
   ) {
     return this.publicAiService.runTool(body);
+  }
+
+  @Get('search/surahs')
+  searchSurahs(@Query('q') query?: string) {
+    return this.publicSearchService.searchSurahs(query ?? '');
+  }
+
+  @Get('search/juzs')
+  searchJuzs(@Query('q') query?: string) {
+    return this.publicSearchService.searchJuzs(query ?? '');
+  }
+
+  @Get('search/markers')
+  searchMarkers(
+    @Query('category') category?: string,
+    @Query('q') query?: string,
+  ) {
+    return this.publicSearchService.searchMarkers(category ?? 'ruku', query ?? '');
+  }
+
+  @Get('search/ayahs')
+  searchAyahs(
+    @Query('q') query?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.publicSearchService.searchAyahs(
+      query ?? '',
+      limit ? Number(limit) : undefined,
+    );
+  }
+
+  @Get('search/text')
+  searchText(
+    @Query('q') query?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.publicSearchService.searchText(
+      query ?? '',
+      limit ? Number(limit) : undefined,
+    );
   }
 
   @Get('pages/:edition/:version/:importedPageNumber')
