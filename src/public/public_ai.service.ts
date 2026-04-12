@@ -259,15 +259,26 @@ export class PublicAiService {
     provider: NormalizedProvider,
     rawProvider: string,
   ): string {
-    if (rawProvider.trim().length > 0) {
-      return rawProvider.trim();
+    const normalized = rawProvider.trim().toLowerCase();
+    if (normalized.length > 0) {
+      switch (normalized) {
+        case 'ollama':
+          return 'Ollama';
+        case 'openai':
+        case 'chatgpt':
+          return 'ChatGPT';
+        case 'custom':
+          return 'Custom AI';
+        default:
+          return rawProvider.trim();
+      }
     }
 
     switch (provider) {
       case 'ollama':
         return 'Ollama';
       case 'openai':
-        return 'OpenAI';
+        return 'ChatGPT';
       case 'custom':
         return 'Custom AI';
       case 'local':

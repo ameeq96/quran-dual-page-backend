@@ -110,7 +110,7 @@ export class AdminService {
         defaultEdition: defaultEdition?.value ?? '16_lines',
         aiLanguage: aiLanguage?.value ?? 'english',
         aiDepth: aiDepth?.value ?? 'fast',
-        aiProvider: aiProvider?.value ?? 'local',
+        aiProvider: this._formatAiProviderLabel(aiProvider?.value),
         aiModel: aiModel?.value ?? 'built-in local mode',
         aiStatusLabel: aiStatusLabel?.value ?? 'Local AI mode in app',
         lastAnnouncementTitle: latestAnnouncement?.[0]?.title ?? null,
@@ -232,5 +232,21 @@ export class AdminService {
       return value as Record<string, unknown>;
     }
     return {};
+  }
+
+  private _formatAiProviderLabel(value?: string | null) {
+    switch ((value ?? '').trim().toLowerCase()) {
+      case 'ollama':
+        return 'Ollama';
+      case 'openai':
+      case 'chatgpt':
+        return 'ChatGPT';
+      case 'custom':
+        return 'Custom AI';
+      case 'local':
+      case '':
+      default:
+        return 'Local assistant';
+    }
   }
 }
