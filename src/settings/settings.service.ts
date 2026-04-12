@@ -38,6 +38,12 @@ export class SettingsService {
     return saved;
   }
 
+  getSettingByKey(key: string) {
+    return this.settingsRepo.findOne({
+      where: { key: key.trim() },
+    });
+  }
+
   async getFlags(rawPage?: number | string, rawPageSize?: number | string) {
     const { page, pageSize, skip, take } = normalizePagination(
       rawPage,

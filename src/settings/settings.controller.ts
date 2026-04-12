@@ -20,6 +20,11 @@ export class SettingsController {
     return this.service.upsertSetting(body);
   }
 
+  @Get('by-key/:key')
+  getSettingByKey(@Param('key') key: string) {
+    return this.service.getSettingByKey(key);
+  }
+
   @Get('flags')
   getFlags(
     @Query('page') page?: string,
