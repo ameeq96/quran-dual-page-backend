@@ -7,8 +7,8 @@ import { Edition } from '../entities/edition.entity';
 import { FeatureFlag } from '../entities/feature_flag.entity';
 
 const DEFAULT_SETTINGS: Array<{ key: string; value: string }> = [
-  { key: 'app_title', value: 'Quran Dual Page & Multi-Line Reader' },
-  { key: 'home_hero_title', value: 'Quran Dual Page & Multi-Line Reader' },
+  { key: 'app_title', value: 'Quran Pak Dual Page Reader' },
+  { key: 'home_hero_title', value: 'Quran Pak Dual Page Reader' },
   {
     key: 'home_hero_subtitle',
     value: 'Read, search, study, and sync your Quran experience from one dashboard.',
@@ -70,6 +70,11 @@ export async function seedAdmin(app: INestApplication) {
     const existing = await settingsRepo.findOne({ where: { key: setting.key } });
     if (!existing) {
       await settingsRepo.save(settingsRepo.create(setting));
+      continue;
+    }
+    if (existing.value !== setting.value) {
+      existing.value = setting.value;
+      await settingsRepo.save(existing);
     }
   }
 
@@ -77,6 +82,11 @@ export async function seedAdmin(app: INestApplication) {
     const existing = await flagsRepo.findOne({ where: { key } });
     if (!existing) {
       await flagsRepo.save(flagsRepo.create({ key, enabled: true }));
+      continue;
+    }
+    if (!existing.enabled) {
+      existing.enabled = true;
+      await flagsRepo.save(existing);
     }
   }
 
@@ -84,6 +94,12 @@ export async function seedAdmin(app: INestApplication) {
     const existing = await editionsRepo.findOne({ where: { key: edition.key } });
     if (!existing) {
       await editionsRepo.save(editionsRepo.create({ ...edition, enabled: true }));
+      continue;
+    }
+    if (existing.label !== edition.label || !existing.enabled) {
+      existing.label = edition.label;
+      existing.enabled = true;
+      await editionsRepo.save(existing);
     }
   }
 }

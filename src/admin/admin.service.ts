@@ -1,13 +1,14 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { MemoryCacheService } from '../common/cache/memory-cache.service';
-import { Announcement } from '../entities/announcement.entity';
-import { AppSetting } from '../entities/app_setting.entity';
-import { AppUser } from '../entities/app_user.entity';
-import { ContentDataset } from '../entities/content_dataset.entity';
-import { Edition } from '../entities/edition.entity';
-import { FeatureFlag } from '../entities/feature_flag.entity';
+import { Injectable } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { MemoryCacheService } from "../common/cache/memory-cache.service";
+import { Announcement } from "../entities/announcement.entity";
+import { AppSetting } from "../entities/app_setting.entity";
+import { AppUser } from "../entities/app_user.entity";
+import { ContentDataset } from "../entities/content_dataset.entity";
+import { Edition } from "../entities/edition.entity";
+import { FeatureFlag } from "../entities/feature_flag.entity";
+import { AssetPacksService } from "../asset_packs/asset_packs.service";
 
 @Injectable()
 export class AdminService {
@@ -24,11 +25,12 @@ export class AdminService {
     private readonly settingsRepo: Repository<AppSetting>,
     @InjectRepository(FeatureFlag)
     private readonly flagsRepo: Repository<FeatureFlag>,
+    private readonly assetPacksService: AssetPacksService,
     private readonly cache: MemoryCacheService,
   ) {}
 
   async getOverview() {
-    return this.cache.getOrSet('admin:overview', 10_000, async () => {
+    return this.cache.getOrSet("admin:overview", 10_000, async () => {
       const [
         totalUsers,
         activeUsers,
@@ -37,6 +39,7 @@ export class AdminService {
         enabledEditions,
         totalDatasets,
         activeDatasets,
+        activeAssetPacks,
         totalAnnouncements,
         activeAnnouncements,
         totalFlags,
@@ -58,27 +61,30 @@ export class AdminService {
         this.editionsRepo.count({ where: { enabled: true } }),
         this.contentDatasetsRepo.count(),
         this.contentDatasetsRepo.count({ where: { active: true } }),
+        this.assetPacksService.activePacks(),
         this.announcementsRepo.count(),
         this.announcementsRepo.count({ where: { active: true } }),
         this.flagsRepo.count(),
         this.flagsRepo.count({ where: { enabled: true } }),
         this.settingsRepo.count(),
         this.announcementsRepo.find({
-          order: { id: 'DESC' },
+          order: { id: "DESC" },
           take: 1,
         }),
-        this.settingsRepo.findOne({ where: { key: 'default_mushaf_edition' } }),
-        this.settingsRepo.findOne({ where: { key: 'ai_default_language' } }),
-        this.settingsRepo.findOne({ where: { key: 'ai_default_depth' } }),
-        this.settingsRepo.findOne({ where: { key: 'ai_provider' } }),
-        this.settingsRepo.findOne({ where: { key: 'ai_model' } }),
-        this.settingsRepo.findOne({ where: { key: 'ai_status_label' } }),
-        this.settingsRepo.findOne({ where: { key: 'app_title' } }),
+        this.settingsRepo.findOne({ where: { key: "default_mushaf_edition" } }),
+        this.settingsRepo.findOne({ where: { key: "ai_default_language" } }),
+        this.settingsRepo.findOne({ where: { key: "ai_default_depth" } }),
+        this.settingsRepo.findOne({ where: { key: "ai_provider" } }),
+        this.settingsRepo.findOne({ where: { key: "ai_model" } }),
+        this.settingsRepo.findOne({ where: { key: "ai_status_label" } }),
+        this.settingsRepo.findOne({ where: { key: "app_title" } }),
       ]);
 
       return {
         appName:
-          appTitle?.value || process.env.APP_NAME || 'Quran Dual Page & Multi-Line Reader',
+          appTitle?.value ||
+          process.env.APP_NAME ||
+          "Quran Pak Dual Page Reader",
         activeUsers,
         totalUsers,
         syncedUsers: syncSummary.syncedUsers,
@@ -91,8 +97,8 @@ export class AdminService {
         totalSessions: 0,
         enabledEditions,
         totalEditions,
-        activeAssetPacks: 0,
-        totalAssetPacks: 0,
+        activeAssetPacks: activeAssetPacks.length,
+        totalAssetPacks: activeAssetPacks.length,
         activeDatasets,
         totalDatasets,
         activeAnnouncements,
@@ -100,12 +106,12 @@ export class AdminService {
         enabledFlags,
         totalFlags,
         settingsCount,
-        defaultEdition: defaultEdition?.value ?? '16_lines',
-        aiLanguage: aiLanguage?.value ?? 'english',
-        aiDepth: aiDepth?.value ?? 'fast',
+        defaultEdition: defaultEdition?.value ?? "16_lines",
+        aiLanguage: aiLanguage?.value ?? "english",
+        aiDepth: aiDepth?.value ?? "fast",
         aiProvider: this._formatAiProviderLabel(aiProvider?.value),
-        aiModel: aiModel?.value ?? 'built-in local mode',
-        aiStatusLabel: aiStatusLabel?.value ?? 'Local AI mode in app',
+        aiModel: aiModel?.value ?? "built-in local mode",
+        aiStatusLabel: aiStatusLabel?.value ?? "Local AI mode in app",
         lastAnnouncementTitle: latestAnnouncement?.[0]?.title ?? null,
         lastSync: syncSummary.latestSyncAt?.toISOString() ?? null,
       };
@@ -113,27 +119,55 @@ export class AdminService {
   }
 
   async getContentStatus() {
-    return this.cache.getOrSet('admin:content-status', 10_000, async () => {
-      const [editions, contentDatasets, flags, settings, announcements] =
-        await Promise.all([
-          this.editionsRepo.find({ order: { id: 'ASC' } }),
-          this.contentDatasetsRepo.find({ where: { active: true }, order: { key: 'ASC' } }),
-          this.flagsRepo.find({ where: { enabled: true }, order: { key: 'ASC' } }),
-          this.settingsRepo.find({ order: { key: 'ASC' } }),
-          this.announcementsRepo.find({ where: { active: true }, order: { id: 'DESC' } }),
-        ]);
+    return this.cache.getOrSet("admin:content-status", 10_000, async () => {
+      const [
+        editions,
+        activeAssetPacks,
+        contentDatasets,
+        flags,
+        settings,
+        announcements,
+      ] = await Promise.all([
+        this.editionsRepo.find({ order: { id: "ASC" } }),
+        this.assetPacksService.activePacks(),
+        this.contentDatasetsRepo.find({
+          where: { active: true },
+          order: { key: "ASC" },
+        }),
+        this.flagsRepo.find({
+          where: { enabled: true },
+          order: { key: "ASC" },
+        }),
+        this.settingsRepo.find({ order: { key: "ASC" } }),
+        this.announcementsRepo.find({
+          where: { active: true },
+          order: { id: "DESC" },
+        }),
+      ]);
 
       return {
-        editionsAvailable: editions.filter((item) => item.enabled).map((item) => item.key),
+        editionsAvailable: editions
+          .filter((item) => item.enabled)
+          .map((item) => item.key),
         editions,
         assetsOnDevice: false,
-        assetPacks: [],
+        assetPacks: activeAssetPacks.map((pack) => ({
+          edition: pack.edition,
+          version: pack.version,
+          pageCount: pack.pageCount,
+          fileExtension: pack.fileExtension,
+          sizeBytes: pack.sizeBytes,
+          publicPath: pack.publicPath,
+        })),
         contentDatasets: contentDatasets.map((item) => ({
           key: item.key,
           version: item.version,
         })),
         enabledFlags: flags.map((item) => item.key),
-        settings: settings.map((item) => ({ key: item.key, value: item.value })),
+        settings: settings.map((item) => ({
+          key: item.key,
+          value: item.value,
+        })),
         announcements: announcements.map((item) => ({
           id: item.id,
           title: item.title,
@@ -216,25 +250,25 @@ export class AdminService {
   }
 
   private _safeRecord(value: unknown): Record<string, unknown> {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
       return value as Record<string, unknown>;
     }
     return {};
   }
 
   private _formatAiProviderLabel(value?: string | null) {
-    switch ((value ?? '').trim().toLowerCase()) {
-      case 'ollama':
-        return 'Ollama';
-      case 'openai':
-      case 'chatgpt':
-        return 'ChatGPT';
-      case 'custom':
-        return 'Custom AI';
-      case 'local':
-      case '':
+    switch ((value ?? "").trim().toLowerCase()) {
+      case "ollama":
+        return "Ollama";
+      case "openai":
+      case "chatgpt":
+        return "ChatGPT";
+      case "custom":
+        return "Custom AI";
+      case "local":
+      case "":
       default:
-        return 'Local assistant';
+        return "Local assistant";
     }
   }
 }

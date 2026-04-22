@@ -2,7 +2,7 @@
   "name": "quran-admin-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "NestJS admin API for Quran Dual Page & Multi-Line Reader.",
+  "description": "NestJS admin API for Quran Pak Dual Page Reader.",
   "scripts": {
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
