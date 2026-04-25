@@ -20,6 +20,16 @@ const DEFAULT_SETTINGS: Array<{ key: string; value: string }> = [
   { key: 'ai_default_language', value: 'english' },
   { key: 'ai_default_depth', value: 'fast' },
   { key: 'default_mushaf_edition', value: '16_lines' },
+  { key: 'default_app_dark_mode', value: 'false' },
+  { key: 'default_quran_page_dark_mode', value: 'false' },
+  { key: 'default_fullscreen_reading', value: 'false' },
+  { key: 'default_show_page_numbers', value: 'true' },
+  { key: 'default_low_memory_mode', value: 'false' },
+  { key: 'default_hifz_focus_mode', value: 'false' },
+  { key: 'default_page_preset', value: 'classic' },
+  { key: 'default_page_preset_enabled', value: 'false' },
+  { key: 'default_page_overlay_enabled', value: 'false' },
+  { key: 'default_page_reflection_enabled', value: 'true' },
 ];
 
 const DEFAULT_FLAGS: string[] = [
@@ -70,11 +80,6 @@ export async function seedAdmin(app: INestApplication) {
     const existing = await settingsRepo.findOne({ where: { key: setting.key } });
     if (!existing) {
       await settingsRepo.save(settingsRepo.create(setting));
-      continue;
-    }
-    if (existing.value !== setting.value) {
-      existing.value = setting.value;
-      await settingsRepo.save(existing);
     }
   }
 
@@ -82,11 +87,6 @@ export async function seedAdmin(app: INestApplication) {
     const existing = await flagsRepo.findOne({ where: { key } });
     if (!existing) {
       await flagsRepo.save(flagsRepo.create({ key, enabled: true }));
-      continue;
-    }
-    if (!existing.enabled) {
-      existing.enabled = true;
-      await flagsRepo.save(existing);
     }
   }
 
@@ -94,12 +94,6 @@ export async function seedAdmin(app: INestApplication) {
     const existing = await editionsRepo.findOne({ where: { key: edition.key } });
     if (!existing) {
       await editionsRepo.save(editionsRepo.create({ ...edition, enabled: true }));
-      continue;
-    }
-    if (existing.label !== edition.label || !existing.enabled) {
-      existing.label = edition.label;
-      existing.enabled = true;
-      await editionsRepo.save(existing);
     }
   }
 }

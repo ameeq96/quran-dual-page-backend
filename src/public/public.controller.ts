@@ -41,6 +41,7 @@ export class PublicController {
 
       const [
         activeAssetPacks,
+        zipAssetPacks,
         activeDatasets,
         editions,
         settings,
@@ -48,6 +49,7 @@ export class PublicController {
         announcements,
       ] = await Promise.all([
         this.assetPacksService.activePacks(),
+        this.assetPacksService.zipCatalog(),
         this.contentDatasetsService.activeDatasets(),
         this.editions.find({
           order: { id: "ASC" },
@@ -72,6 +74,16 @@ export class PublicController {
           availableImportedPages: pack.availableImportedPages,
           contiguousImportedPageStart: pack.contiguousImportedPageStart,
           contiguousImportedPageEnd: pack.contiguousImportedPageEnd,
+        })),
+        zipAssetPacks: zipAssetPacks.map((pack) => ({
+          key: pack.key,
+          edition: pack.edition,
+          fileName: pack.fileName,
+          sizeBytes: pack.sizeBytes,
+          modifiedAt: pack.modifiedAt,
+          url: publicBaseUrl
+            ? `${publicBaseUrl}${pack.publicPath}`
+            : pack.publicPath,
         })),
         contentDatasets: activeDatasets.map((dataset) => ({
           key: dataset.key,
@@ -101,6 +113,27 @@ export class PublicController {
         serverTime: new Date().toISOString(),
       };
     });
+  }
+
+  @Get("asset-packs.json")
+  async getAssetPackCatalog(@Req() req: Request) {
+    const proto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+    const host = req.get("host");
+    const publicBaseUrl = host ? `${proto}://${host}` : "";
+    const packs = await this.assetPacksService.zipCatalog();
+
+    return {
+      assetPacks: packs.map((pack) => ({
+        key: pack.key,
+        edition: pack.edition,
+        fileName: pack.fileName,
+        sizeBytes: pack.sizeBytes,
+        modifiedAt: pack.modifiedAt,
+        url: publicBaseUrl
+          ? `${publicBaseUrl}${pack.publicPath}`
+          : pack.publicPath,
+      })),
+    };
   }
 
   @Post("ai/run")

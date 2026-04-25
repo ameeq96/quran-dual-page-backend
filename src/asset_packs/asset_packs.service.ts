@@ -19,6 +19,16 @@ export type ResolvedAssetPack = {
   active: boolean;
 };
 
+export type ResolvedZipAssetPack = {
+  key: string;
+  edition: string;
+  fileName: string;
+  sizeBytes: number;
+  storagePath: string;
+  publicPath: string;
+  modifiedAt: string;
+};
+
 type PackCandidate = ResolvedAssetPack & {
   latestModifiedTimeMs: number;
 };
@@ -48,6 +58,68 @@ export class AssetPacksService {
   activePacks(): Promise<ResolvedAssetPack[]> {
     return this.cache.getOrSet("asset-packs:active", 60_000, async () =>
       this._discoverActivePacks(),
+    );
+  }
+
+  zipCatalog(): Promise<ResolvedZipAssetPack[]> {
+    return this.cache.getOrSet("asset-packs:zip-catalog", 60_000, async () =>
+      this._discoverZipCatalog(),
+    );
+  }
+
+  private _discoverZipCatalog(): ResolvedZipAssetPack[] {
+    const root = storagePath("asset_packs");
+    if (!fs.existsSync(root)) {
+      return [];
+    }
+
+    const byEdition = new Map<string, ResolvedZipAssetPack>();
+    const visitDirectory = (directory: string, publicPrefix: string) => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          const edition = this._normalizeEditionKey(entry.name);
+          if (edition) {
+            visitDirectory(entryPath, `${publicPrefix}/${entry.name}`);
+          }
+          continue;
+        }
+        if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".zip")) {
+          continue;
+        }
+
+        const baseName = entry.name.replace(/\.zip$/i, "");
+        const edition =
+          this._normalizeEditionKey(baseName) ??
+          this._normalizeEditionKey(path.basename(directory));
+        if (!edition) {
+          continue;
+        }
+
+        const stats = fs.statSync(entryPath);
+        const current = byEdition.get(edition);
+        if (current && new Date(current.modifiedAt).getTime() >= stats.mtimeMs) {
+          continue;
+        }
+
+        byEdition.set(edition, {
+          key: edition,
+          edition,
+          fileName: entry.name,
+          sizeBytes: stats.size,
+          storagePath: entryPath,
+          publicPath: `${publicPrefix}/${entry.name}`,
+          modifiedAt: stats.mtime.toISOString(),
+        });
+      }
+    };
+
+    visitDirectory(root, "/assets/asset_packs");
+
+    return Array.from(byEdition.values()).sort(
+      (left, right) =>
+        this._editionSortIndex(left.edition) -
+        this._editionSortIndex(right.edition),
     );
   }
 

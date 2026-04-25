@@ -123,6 +123,7 @@ export class AdminService {
       const [
         editions,
         activeAssetPacks,
+        zipAssetPacks,
         contentDatasets,
         flags,
         settings,
@@ -130,6 +131,7 @@ export class AdminService {
       ] = await Promise.all([
         this.editionsRepo.find({ order: { id: "ASC" } }),
         this.assetPacksService.activePacks(),
+        this.assetPacksService.zipCatalog(),
         this.contentDatasetsRepo.find({
           where: { active: true },
           order: { key: "ASC" },
@@ -158,6 +160,14 @@ export class AdminService {
           fileExtension: pack.fileExtension,
           sizeBytes: pack.sizeBytes,
           publicPath: pack.publicPath,
+        })),
+        zipAssetPacks: zipAssetPacks.map((pack) => ({
+          key: pack.key,
+          edition: pack.edition,
+          fileName: pack.fileName,
+          sizeBytes: pack.sizeBytes,
+          publicPath: pack.publicPath,
+          modifiedAt: pack.modifiedAt,
         })),
         contentDatasets: contentDatasets.map((item) => ({
           key: item.key,
